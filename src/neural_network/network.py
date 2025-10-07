@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import os
 from .layer import Layer
-from ..utils.math_utils import binary_cross_entropy, accuracy
+from ..utils.math_utils import binary_cross_entropy, categorical_cross_entropy, accuracy
 
 
 class Network:
@@ -76,7 +76,7 @@ class Network:
 
         Args:
             X (np.array): Input data
-            y (np.array): True labels
+            y (np.array): True labels (one-hot encoded for categorical)
             learning_rate (float): Learning rate
 
         Returns:
@@ -87,16 +87,24 @@ class Network:
 
         # Ensure y and y_pred have same shape
         if y.ndim == 1:
-            y = y.reshape(-1, 1)
+            y = y.reshape(1, -1)
         if y_pred.ndim == 1:
-            y_pred = y_pred.reshape(-1, 1)
+            y_pred = y_pred.reshape(1, -1)
+
+        # Determine which loss function to use based on output shape
+        output_layer = self.layers[-1]
+        is_softmax = output_layer.activation_func.__class__.__name__ == 'Softmax'
 
         # Calculate loss
-        loss = binary_cross_entropy(y, y_pred)
+        if is_softmax and y_pred.shape[0] > 1:
+            # Categorical cross-entropy for softmax
+            loss = categorical_cross_entropy(y, y_pred)
+        else:
+            # Binary cross-entropy for sigmoid
+            loss = binary_cross_entropy(y, y_pred)
 
         # Calculate initial gradient for backpropagation
-        # For binary cross-entropy with sigmoid: dL/dy_pred = (y_pred - y) / (y_pred * (1 - y_pred))
-        # But with sigmoid output, this simplifies to: y_pred - y
+        # For cross-entropy with softmax/sigmoid: gradient simplifies to (y_pred - y)
         grad_output = y_pred - y
 
         # Backward pass through all layers (in reverse order)
@@ -188,14 +196,43 @@ class Network:
 
         Args:
             X (np.array): Input data
-            y (np.array): True labels
+            y (np.array): True labels (can be one-hot or single values)
 
         Returns:
             tuple: (loss, accuracy)
         """
-        y_pred = self.predict(X)
-        loss = binary_cross_entropy(y, y_pred)
-        acc = accuracy(y, y_pred)
+        y_pred_raw = self.forward(X.T)
+
+        # Determine which loss to use
+        output_layer = self.layers[-1]
+        is_softmax = output_layer.activation_func.__class__.__name__ == 'Softmax'
+
+        # Prepare labels for loss computation
+        if y.ndim == 1:
+            # Convert to one-hot if needed for softmax
+            if is_softmax and y_pred_raw.shape[0] > 1:
+                y_one_hot = np.zeros((y_pred_raw.shape[0], len(y)))
+                y_one_hot[y.astype(int), np.arange(len(y))] = 1
+                loss = categorical_cross_entropy(y_one_hot, y_pred_raw)
+            else:
+                y_reshaped = y.reshape(1, -1)
+                loss = binary_cross_entropy(y_reshaped, y_pred_raw)
+        else:
+            # Already one-hot encoded
+            if is_softmax and y_pred_raw.shape[0] > 1:
+                loss = categorical_cross_entropy(y.T, y_pred_raw)
+            else:
+                loss = binary_cross_entropy(y, y_pred_raw.flatten())
+
+        # For accuracy, convert predictions
+        if is_softmax and y_pred_raw.shape[0] > 1:
+            y_pred_classes = np.argmax(y_pred_raw, axis=0)
+        else:
+            y_pred_classes = (y_pred_raw.flatten() > 0.5).astype(int)
+
+        y_true_classes = y if y.ndim == 1 else np.argmax(y, axis=1) if y.shape[1] > 1 else y.flatten()
+        acc = np.mean(y_pred_classes == y_true_classes)
+
         return loss, acc
 
     def predict(self, X):

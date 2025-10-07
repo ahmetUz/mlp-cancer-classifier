@@ -47,7 +47,7 @@ def normalize_features(X_train, X_val):
     X_train_norm = (X_train - mean) / std
     X_val_norm = (X_val - mean) / std
 
-    return X_train_norm, X_val_norm, mean, std
+    return X_train_norm, X_val_norm
 
 
 def split_train_validation(x, y, test_size=0.2, random_state=42):
@@ -107,7 +107,7 @@ def main():
         X_train, X_val, y_train, y_val = split_train_validation(x, y)
 
         # Normaliser les features
-        X_train_norm, X_val_norm, mean, std = normalize_features(
+        X_train_norm, X_val_norm = normalize_features(
             X_train.values, X_val.values
         )
 
@@ -127,11 +127,6 @@ def main():
         # Afficher les dimensions comme dans l'exemple du sujet
         print(f"x_train shape : ({X_train.shape[0]}, {X_train.shape[1]})")
         print(f"x_valid shape : ({X_val.shape[0]}, {X_val.shape[1]})")
-
-        # Sauvegarder aussi les paramètres de normalisation
-        np.savez(os.path.join('data', 'normalization_params.npz'),
-                 mean=mean, std=std)
-        print("Normalization parameters saved to: data/normalization_params.npz")
 
     except Exception as e:
         print(f"Error: {e}")
