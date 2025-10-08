@@ -5,7 +5,7 @@ from .activations import get_activation
 class Layer:
     """Dense (fully connected) layer for neural network"""
 
-    def __init__(self, input_size, output_size, activation='sigmoid', weights_initializer='random'):
+    def __init__(self, input_size, output_size, activation='sigmoid', weights_initializer='he'):
         """
         Initialize a dense layer
 

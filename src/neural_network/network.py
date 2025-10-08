@@ -45,7 +45,7 @@ class Network:
                 input_size=config['input_size'],
                 output_size=config['output_size'],
                 activation=config.get('activation', 'sigmoid'),
-                weights_initializer=config.get('weights_initializer', 'random')
+                weights_initializer=config.get('weights_initializer', 'he')
             )
             self.add_layer(layer)
 
