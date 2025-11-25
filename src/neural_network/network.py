@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import os
+import copy
 from .layer import Layer
 from ..utils.math_utils import binary_cross_entropy, categorical_cross_entropy, accuracy
 
@@ -135,7 +136,7 @@ class Network:
         return loss, acc
 
     def train(self, X_train, y_train, X_val, y_val, epochs=100, learning_rate=0.01,
-              batch_size=32, verbose=True):
+              batch_size=32, patience=10, verbose=True):
         """
         Train the network
 
@@ -151,6 +152,9 @@ class Network:
         """
         n_samples = X_train.shape[0]
         n_batches = (n_samples + batch_size - 1) // batch_size
+        best_weights = None
+        best_val_loss = float('inf')
+        wait = 0
 
         for epoch in range(epochs):
             # Shuffle training data
@@ -179,7 +183,16 @@ class Network:
 
             # Validation metrics
             val_loss, val_acc = self.evaluate(X_val, y_val)
-
+            
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_weights = copy.deepcopy(self.layers)
+            else:
+                wait += 1
+                if wait >= patience:
+                    # self.layers = best_weights
+                    print("\nEND of train\n")
+                    break
             # Store history
             self.history['train_loss'].append(train_loss)
             self.history['train_acc'].append(train_acc)
@@ -189,6 +202,7 @@ class Network:
             # Print progress
             if verbose:
                 print(f"epoch {epoch + 1:02d}/{epochs} - loss: {train_loss:.4f} - val_loss: {val_loss:.4f}")
+        self.layers = best_weights
 
     def evaluate(self, X, y):
         """
