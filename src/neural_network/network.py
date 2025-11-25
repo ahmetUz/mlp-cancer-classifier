@@ -321,22 +321,3 @@ class Network:
             self.history = model_data['history']
 
         print(f"Model loaded from: {filepath}")
-
-    def get_architecture(self):
-        """
-        Get network architecture summary
-
-        Returns:
-            str: Architecture description
-        """
-        architecture = "Network Architecture:\n"
-        architecture += "=" * 50 + "\n"
-
-        for i, layer in enumerate(self.layers):
-            architecture += f"Layer {i + 1}: {layer.input_size} -> {layer.output_size} "
-            architecture += f"({layer.activation_func.__class__.__name__})\n"
-
-        total_params = sum(layer.weights.size + layer.biases.size for layer in self.layers)
-        architecture += f"\nTotal parameters: {total_params}"
-
-        return architecture

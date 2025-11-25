@@ -104,38 +104,6 @@ class Layer:
 
         return grad_input
 
-    def backward_with_gradients(self, grad_output):
-        """
-        Backward pass that returns gradients without updating weights
-        Used for gradient accumulation in batch processing
-
-        Args:
-            grad_output (np.array): Gradient of loss w.r.t layer output
-
-        Returns:
-            tuple: (grad_input, grad_weights, grad_biases)
-        """
-        if grad_output.ndim == 1:
-            grad_output = grad_output.reshape(-1, 1)
-
-        batch_size = self.last_input.shape[1]
-
-        # Compute gradient w.r.t activation input
-        activation_grad = self.activation_func.backward(self.last_z)
-        grad_z = grad_output * activation_grad
-
-        # Compute gradients
-        grad_weights = np.dot(grad_z, self.last_input.T) / batch_size
-        grad_biases = np.mean(grad_z, axis=1, keepdims=True)
-        grad_input = np.dot(self.weights.T, grad_z)
-
-        return grad_input, grad_weights, grad_biases
-
-    def update_weights(self, grad_weights, grad_biases, learning_rate):
-        """Update weights and biases with given gradients"""
-        self.weights -= learning_rate * grad_weights
-        self.biases -= learning_rate * grad_biases
-
     def get_params(self):
         """Get layer parameters for saving"""
         return {
