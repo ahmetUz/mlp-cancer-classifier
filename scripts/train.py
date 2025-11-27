@@ -74,7 +74,7 @@ def main():
     epochs = 300
     learning_rate = 0.1
     batch_size = 16
-    patience = 300
+    patience = 30
 
     # Train the network
     network.train(

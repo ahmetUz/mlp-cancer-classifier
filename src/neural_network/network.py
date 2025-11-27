@@ -154,6 +154,7 @@ class Network:
         n_batches = (n_samples + batch_size - 1) // batch_size
         best_weights = None
         best_val_loss = float('inf')
+        best_epoch = 0
         wait = 0
 
         for epoch in range(epochs):
@@ -186,12 +187,13 @@ class Network:
             
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                best_epoch = epoch
                 best_weights = copy.deepcopy(self.layers)
             else:
                 wait += 1
                 if wait >= patience:
                     # self.layers = best_weights
-                    print("\nEND of train\n")
+                    print("\nEND of train -> best epoch = " , best_epoch , "\n")
                     break
             # Store history
             self.history['train_loss'].append(train_loss)
