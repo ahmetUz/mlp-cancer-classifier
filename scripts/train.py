@@ -3,12 +3,15 @@
 Training script for the MLP classifier.
 
 Usage:
-    python train.py                           # Uses data/data_train.csv and data/data_val.csv
-    python train.py data/data_training.csv    # Uses evaluation.py format (no header)
+    python train.py                                    # Uses data/data_train.csv and data/data_val.csv with default [64, 32] layers
+    python train.py data/data_training.csv             # Uses evaluation.py format (no header) with default layers
+    python train.py --layers 128 64 32                 # Uses custom hidden layers [128, 64, 32]
+    python train.py data/data_training.csv -l 32 16    # Uses custom file and layers
 """
 
 import sys
 import os
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -97,10 +100,53 @@ def plot_learning_curves(history):
 
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='Train MLP classifier for cancer diagnosis',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python train.py                                    # Default layers [64, 32]
+  python train.py --layers 128 64 32                 # Custom hidden layers
+  python train.py data/custom.csv -l 32 16           # Custom file and layers
+        """
+    )
+    parser.add_argument(
+        'data_file',
+        nargs='?',
+        default=None,
+        help='Optional: path to training data file (evaluation.py format, no header)'
+    )
+    parser.add_argument(
+        '--layers', '-l',
+        type=int,
+        nargs='*',
+        default=[64, 32],
+        metavar='SIZE',
+        help='Hidden layer sizes (default: 64 32). Must specify at least 2 layers.'
+    )
+
+    args = parser.parse_args()
+
+    # Validate layers argument
+    if len(args.layers) < 2:
+        parser.error("--layers must specify at least 2 hidden layers")
+
+    if any(size <= 0 for size in args.layers):
+        parser.error("--layers must contain only positive integers (greater than 0)")
+
+    # Display network configuration
+    print("=" * 60)
+    print("Network Configuration")
+    print("=" * 60)
+    print(f"Hidden layers: {args.layers}")
+    print("=" * 60)
+    print()
+
     # Determine which mode to use
-    if len(sys.argv) > 1:
+    if args.data_file:
         # Evaluation mode: single file without header
-        train_path = sys.argv[1]
+        train_path = args.data_file
         print(f"Loading data from {train_path} (evaluation mode)...")
 
         X_all, y_all = load_data_no_header(train_path)
@@ -140,15 +186,30 @@ def main():
     print(f"x_train shape : ({X_train.shape[0]}, {X_train.shape[1]})")
     print(f"x_valid shape : ({X_val.shape[0]}, {X_val.shape[1]})")
 
-    # Create network
+    # Create network with configurable layers
     n_features = X_train.shape[1]
     network = Network()
 
-    layer_configs = [
-        {'input_size': n_features, 'output_size': 64, 'activation': 'relu', 'l2_lambda': 0.0005},
-        {'input_size': 64, 'output_size': 32, 'activation': 'relu', 'l2_lambda': 0.0005},
-        {'input_size': 32, 'output_size': 2, 'activation': 'softmax'}
-    ]
+    # Build layer configs dynamically from args.layers
+    layer_configs = []
+
+    # Hidden layers
+    prev_size = n_features
+    for layer_size in args.layers:
+        layer_configs.append({
+            'input_size': prev_size,
+            'output_size': layer_size,
+            'activation': 'relu',
+            'l2_lambda': 0.0005
+        })
+        prev_size = layer_size
+
+    # Output layer
+    layer_configs.append({
+        'input_size': prev_size,
+        'output_size': 2,
+        'activation': 'softmax'
+    })
 
     network.create_network(layer_configs)
 
