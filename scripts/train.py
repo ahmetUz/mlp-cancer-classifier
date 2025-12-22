@@ -2,11 +2,14 @@
 """
 Training script for the MLP classifier.
 
+Auto-detects CSV format (with header vs without header) by reading the first line.
+
 Usage:
     python train.py                                    # Uses data/data_train.csv and data/data_val.csv with default [64, 32] layers
-    python train.py data/data_training.csv             # Uses evaluation.py format (no header) with default layers
+    python train.py data/data_train.csv                # Auto-detects header format, uses with validation file
+    python train.py data/data_training.csv             # Auto-detects no-header format with default layers
     python train.py --layers 128 64 32                 # Uses custom hidden layers [128, 64, 32]
-    python train.py data/data_training.csv -l 32 16    # Uses custom file and layers
+    python train.py data/data_training.csv -l 32 16    # Auto-detects format, uses custom file and layers
 """
 
 import sys
@@ -49,6 +52,48 @@ def load_data_no_header(path):
     X = np.array([d[0] for d in data])
     y = np.array([d[1] for d in data])
     return X, y
+
+
+def detect_csv_format(path):
+    """
+    Auto-detect CSV format by reading the first line.
+
+    Priority: Checks column 1 for 'M'/'B' FIRST (no_header), then last column for 'diagnosis' (with_header).
+
+    Returns:
+        'with_header' if the file has a header row (last column is 'diagnosis')
+        'no_header' if the file has no header (column 1 is 'M' or 'B')
+
+    Raises:
+        FileNotFoundError: If the file does not exist
+        PermissionError: If the file cannot be read due to permissions
+        ValueError: If the file is empty or format cannot be determined
+    """
+    try:
+        with open(path, 'r') as f:
+            first_line = f.readline().strip()
+
+            if not first_line:
+                raise ValueError(f"Empty CSV file: {path}")
+
+            parts = first_line.split(',')
+
+            if len(parts) < 2:
+                raise ValueError(f"Invalid CSV format: expected at least 2 columns, got {len(parts)}")
+
+            # Check column 1 for M/B FIRST (no_header format)
+            if parts[1] in ['M', 'B']:
+                return 'no_header'
+            # Then check last column for 'diagnosis' (with_header format)
+            elif parts[-1] == 'diagnosis':
+                return 'with_header'
+            else:
+                raise ValueError(f"Cannot detect CSV format: column 1 is '{parts[1]}', last column is '{parts[-1]}'. Expected 'M'/'B' in column 1 or 'diagnosis' in last column.")
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"CSV file not found: {path}")
+    except PermissionError:
+        raise PermissionError(f"Permission denied when reading CSV file: {path}")
 
 
 def standardize_features(X_train, X_val=None):
@@ -115,7 +160,7 @@ Examples:
         'data_file',
         nargs='?',
         default=None,
-        help='Optional: path to training data file (evaluation.py format, no header)'
+        help='Optional: path to training data file (auto-detects CSV format with or without header)'
     )
     parser.add_argument(
         '--layers', '-l',
@@ -145,19 +190,58 @@ Examples:
 
     # Determine which mode to use
     if args.data_file:
-        # Evaluation mode: single file without header
+        # Single file mode: auto-detect format
         train_path = args.data_file
-        print(f"Loading data from {train_path} (evaluation mode)...")
 
-        X_all, y_all = load_data_no_header(train_path)
+        if not os.path.exists(train_path):
+            print(f"Error: File not found: {train_path}")
+            sys.exit(1)
 
-        # Split 90/10 for train/val
-        n_samples = len(X_all)
-        indices = np.random.permutation(n_samples)
-        split_idx = int(0.9 * n_samples)
+        # Auto-detect CSV format
+        try:
+            csv_format = detect_csv_format(train_path)
+            print(f"Detected CSV format: {csv_format}")
+        except (FileNotFoundError, PermissionError, ValueError) as e:
+            print(f"Error: {e}")
+            sys.exit(1)
 
-        X_train, y_train = X_all[indices[:split_idx]], y_all[indices[:split_idx]]
-        X_val, y_val = X_all[indices[split_idx:]], y_all[indices[split_idx:]]
+        if csv_format == 'with_header':
+            # File has header - need to check if we have a validation file
+            # Assume validation file is in same directory with _val suffix
+            base_path = train_path.replace('_train.csv', '')
+            val_path = base_path + '_val.csv'
+
+            if os.path.exists(val_path):
+                # Use separate train/val files
+                print(f"Loading data from {train_path} and {val_path}...")
+                X_train, y_train, X_val, y_val = load_data_with_header(train_path, val_path)
+            else:
+                # Use single file, split it ourselves
+                print(f"Loading data from {train_path} (no validation file found, will split)...")
+                import pandas as pd
+                df = pd.read_csv(train_path)
+                X_all = df.drop(['diagnosis'], axis=1).values
+                y_all = df['diagnosis'].values
+
+                # Split 90/10 for train/val
+                n_samples = len(X_all)
+                indices = np.random.permutation(n_samples)
+                split_idx = int(0.9 * n_samples)
+
+                X_train, y_train = X_all[indices[:split_idx]], y_all[indices[:split_idx]]
+                X_val, y_val = X_all[indices[split_idx:]], y_all[indices[split_idx:]]
+
+        else:  # no_header
+            print(f"Loading data from {train_path} (no header format)...")
+            X_all, y_all = load_data_no_header(train_path)
+
+            # Split 90/10 for train/val
+            n_samples = len(X_all)
+            indices = np.random.permutation(n_samples)
+            split_idx = int(0.9 * n_samples)
+
+            X_train, y_train = X_all[indices[:split_idx]], y_all[indices[:split_idx]]
+            X_val, y_val = X_all[indices[split_idx:]], y_all[indices[split_idx:]]
 
         # Standardize
         X_train, X_val, mean, std = standardize_features(X_train, X_val)
@@ -166,7 +250,7 @@ Examples:
         np.save('models/normalization_params.npy', {'mean': mean, 'std': std})
 
     else:
-        # Standard mode: two files with header
+        # Standard mode: use default two files with header
         train_path = 'data/data_train.csv'
         val_path = 'data/data_val.csv'
 
