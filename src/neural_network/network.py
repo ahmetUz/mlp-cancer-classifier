@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import os
 import copy
-from .layer import Layer, Dropout
+from .layer import Layer
 from ..utils.math_utils import binary_cross_entropy, categorical_cross_entropy, accuracy
 
 
@@ -24,15 +24,13 @@ class Network:
         """Set network to training mode (dropout active)"""
         self.training = True
         for layer in self.layers:
-            if isinstance(layer, Dropout):
-                layer.training = True
+            layer.training = True
 
     def eval_mode(self):
         """Set network to evaluation mode (dropout inactive)"""
         self.training = False
         for layer in self.layers:
-            if isinstance(layer, Dropout):
-                layer.training = False
+            layer.training = False
 
     def add_layer(self, layer):
         """
@@ -50,24 +48,21 @@ class Network:
         Args:
             layer_configs (list): List of dicts with layer parameters
                 Example: [
-                    {'input_size': 30, 'output_size': 24, 'activation': 'sigmoid', 'l2_lambda': 0.01},
-                    {'type': 'dropout', 'rate': 0.3},
-                    {'input_size': 24, 'output_size': 24, 'activation': 'sigmoid', 'l2_lambda': 0.01},
-                    {'input_size': 24, 'output_size': 1, 'activation': 'sigmoid'}
+                    {'input_size': 30, 'output_size': 64, 'activation': 'relu', 'dropout_rate': 0.3},
+                    {'input_size': 64, 'output_size': 32, 'activation': 'relu', 'dropout_rate': 0.3},
+                    {'input_size': 32, 'output_size': 2, 'activation': 'softmax'}
                 ]
         """
         self.layers = []
         for config in layer_configs:
-            if config.get('type') == 'dropout':
-                layer = Dropout(rate=config.get('rate', 0.5))
-            else:
-                layer = Layer(
-                    input_size=config['input_size'],
-                    output_size=config['output_size'],
-                    activation=config.get('activation', 'sigmoid'),
-                    weights_initializer=config.get('weights_initializer', 'he'),
-                    l2_lambda=config.get('l2_lambda', 0.0)
-                )
+            layer = Layer(
+                input_size=config['input_size'],
+                output_size=config['output_size'],
+                activation=config.get('activation', 'sigmoid'),
+                weights_initializer=config.get('weights_initializer', 'he'),
+                l2_lambda=config.get('l2_lambda', 0.0),
+                dropout_rate=config.get('dropout_rate', 0.0)
+            )
             self.add_layer(layer)
 
     def forward(self, X):
@@ -101,7 +96,7 @@ class Network:
             learning_rate (float): Learning rate
 
         Returns:
-            float: Loss value
+            tuple: (loss, y_pred) - Loss value and predictions before weight update
         """
         # Forward pass
         y_pred = self.forward(X)
@@ -113,8 +108,7 @@ class Network:
             y_pred = y_pred.reshape(1, -1)
 
         # Determine which loss function to use based on output shape
-        # Find the last Dense layer (not Dropout)
-        output_layer = next(l for l in reversed(self.layers) if isinstance(l, Layer))
+        output_layer = self.layers[-1]
         is_softmax = output_layer.activation_func.__class__.__name__ == 'Softmax'
 
         # Calculate loss
@@ -127,18 +121,20 @@ class Network:
 
         # Add L2 regularization penalty to loss
         for layer in self.layers:
-            if isinstance(layer, Layer):
-                loss += layer.l2_penalty()
+            loss += layer.l2_penalty()
 
         # Calculate initial gradient for backpropagation
         # For cross-entropy with softmax/sigmoid: gradient simplifies to (y_pred - y)
+        # This is dL/dz (not dL/da), so output layer should skip activation gradient
         grad_output = y_pred - y
 
         # Backward pass through all layers (in reverse order)
-        for layer in reversed(self.layers):
-            grad_output = layer.backward(grad_output, learning_rate)
+        layers_reversed = list(reversed(self.layers))
+        for i, layer in enumerate(layers_reversed):
+            is_output_layer = (i == 0)  # First in reversed order = output layer
+            grad_output = layer.backward(grad_output, learning_rate, is_output_layer)
 
-        return loss
+        return loss, y_pred
 
     def train_batch(self, X_batch, y_batch, learning_rate):
         """
@@ -152,11 +148,10 @@ class Network:
         Returns:
             tuple: (loss, accuracy) for this batch
         """
-        # Forward and backward pass
-        loss = self.backward(X_batch.T, y_batch.T, learning_rate)
+        # Forward and backward pass (y_pred is from before weight update)
+        loss, y_pred = self.backward(X_batch.T, y_batch.T, learning_rate)
 
-        # Calculate accuracy
-        y_pred = self.forward(X_batch.T)
+        # Calculate accuracy using the same y_pred as the loss
         acc = accuracy(y_batch.T, y_pred)
 
         return loss, acc
@@ -219,11 +214,11 @@ class Network:
                 best_val_loss = val_loss
                 best_epoch = epoch
                 best_weights = copy.deepcopy(self.layers)
+                wait = 0  # Reset patience counter when improvement found
             else:
                 wait += 1
                 if wait >= patience:
-                    # self.layers = best_weights
-                    print("\nEND of train -> best epoch = " , best_epoch , "\n")
+                    print(f"\nEarly stopping: best epoch = {best_epoch + 1}\n")
                     break
             # Store history
             self.history['train_loss'].append(train_loss)
@@ -250,8 +245,7 @@ class Network:
         y_pred_raw = self.forward(X.T)
 
         # Determine which loss to use
-        # Find the last Dense layer (not Dropout)
-        output_layer = next(l for l in reversed(self.layers) if isinstance(l, Layer))
+        output_layer = self.layers[-1]
         is_softmax = output_layer.activation_func.__class__.__name__ == 'Softmax'
 
         # Prepare labels for loss computation
@@ -356,16 +350,17 @@ class Network:
         layer_configs = model_data['layers']
 
         for config in layer_configs:
+            # Skip old dropout-only configs (backward compatibility)
             if config.get('type') == 'dropout':
-                layer = Dropout(rate=config.get('rate', 0.5))
-            else:
-                layer = Layer(
-                    input_size=config['input_size'],
-                    output_size=config['output_size'],
-                    activation=config['activation'],
-                    l2_lambda=config.get('l2_lambda', 0.0)
-                )
-                layer.set_params(config)
+                continue
+            layer = Layer(
+                input_size=config['input_size'],
+                output_size=config['output_size'],
+                activation=config['activation'],
+                l2_lambda=config.get('l2_lambda', 0.0),
+                dropout_rate=config.get('dropout_rate', 0.0)
+            )
+            layer.set_params(config)
             self.add_layer(layer)
 
         # Restore history if available

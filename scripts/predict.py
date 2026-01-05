@@ -13,48 +13,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.neural_network.network import Network
-
-
-def detect_format(path):
-    """Detect if CSV has header or not"""
-    with open(path, 'r') as f:
-        first_line = f.readline().strip()
-        parts = first_line.split(',')
-        # If second column is M or B, it's evaluation.py format (no header)
-        if len(parts) > 1 and parts[1] in ['M', 'B']:
-            return 'no_header'
-        return 'header'
-
-
-def load_data_no_header(path):
-    """Load data from CSV without header (evaluation.py format)"""
-    data = []
-    with open(path, 'r') as f:
-        for line in f:
-            parts = line.strip().split(',')
-            diagnosis = 1 if parts[1] == 'M' else 0
-            features = [float(x) for x in parts[2:]]
-            data.append((features, diagnosis))
-
-    X = np.array([d[0] for d in data])
-    y = np.array([d[1] for d in data])
-    return X, y
-
-
-def load_data_with_header(path):
-    """Load data from CSV with header"""
-    import pandas as pd
-
-    df = pd.read_csv(path)
-
-    if 'diagnosis' in df.columns:
-        X = df.drop(['diagnosis'], axis=1).values
-        y = df['diagnosis'].values
-    else:
-        X = df.values
-        y = None
-
-    return X, y
+from src.data.loaders import detect_csv_format, load_single_dataset, load_data_no_header
 
 
 def main():
@@ -93,12 +52,17 @@ def main():
 
     # Detect format and load data
     print(f"Loading data from {data_path}...")
-    data_format = detect_format(data_path)
+    try:
+        csv_format = detect_csv_format(data_path)
+        print(f"Detected CSV format: {csv_format}")
+    except (FileNotFoundError, PermissionError, ValueError) as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
-    if data_format == 'no_header':
+    if csv_format == 'no_header':
         X, y = load_data_no_header(data_path)
     else:
-        X, y = load_data_with_header(data_path)
+        X, y = load_single_dataset(data_path)
 
     # Normalize
     X_norm = (X - mean) / std

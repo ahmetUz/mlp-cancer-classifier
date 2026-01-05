@@ -7,141 +7,45 @@ Auto-detects CSV format (with header vs without header) by reading the first lin
 Usage:
     python train.py                                    # Uses data/data_train.csv and data/data_val.csv with default [64, 32] layers
     python train.py data/data_train.csv                # Auto-detects header format, uses with validation file
-    python train.py data/data_training.csv             # Auto-detects no-header format with default layers
     python train.py --layers 128 64 32                 # Uses custom hidden layers [128, 64, 32]
-    python train.py data/data_training.csv -l 32 16    # Auto-detects format, uses custom file and layers
+    python train.py data/data_train.csv -l 32 16       # Auto-detects format, uses custom file and layers
 """
 
 import sys
 import os
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.neural_network.network import Network
+from src.data.loaders import detect_csv_format, load_train_val_data, load_data_no_header
+from src.data.preprocessing import standardize_features, to_onehot
+from src.data.visualization import plot_learning_curves
 
 
-def load_data_with_header(train_path, val_path):
-    """Load data from CSV with header (split_dataset.py format)"""
-    import pandas as pd
-
-    train_df = pd.read_csv(train_path)
-    val_df = pd.read_csv(val_path)
-
-    X_train = train_df.drop(['diagnosis'], axis=1).values
-    y_train = train_df['diagnosis'].values
-
-    X_val = val_df.drop(['diagnosis'], axis=1).values
-    y_val = val_df['diagnosis'].values
-
-    return X_train, y_train, X_val, y_val
-
-
-def load_data_no_header(path):
-    """Load data from CSV without header (evaluation.py format)"""
-    data = []
-    with open(path, 'r') as f:
-        for line in f:
-            parts = line.strip().split(',')
-            diagnosis = 1 if parts[1] == 'M' else 0
-            features = [float(x) for x in parts[2:]]
-            data.append((features, diagnosis))
-
-    X = np.array([d[0] for d in data])
-    y = np.array([d[1] for d in data])
-    return X, y
-
-
-def detect_csv_format(path):
+def dropout_rate(value):
     """
-    Auto-detect CSV format by reading the first line.
+    Custom argparse type validator for dropout rate.
 
-    Priority: Checks column 1 for 'M'/'B' FIRST (no_header), then last column for 'diagnosis' (with_header).
+    Args:
+        value: String value from command line
 
     Returns:
-        'with_header' if the file has a header row (last column is 'diagnosis')
-        'no_header' if the file has no header (column 1 is 'M' or 'B')
+        float: Validated dropout rate
 
     Raises:
-        FileNotFoundError: If the file does not exist
-        PermissionError: If the file cannot be read due to permissions
-        ValueError: If the file is empty or format cannot be determined
+        argparse.ArgumentTypeError: If value is not in valid range [0.0, 1.0)
     """
     try:
-        with open(path, 'r') as f:
-            first_line = f.readline().strip()
+        rate = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid float value: '{value}'")
 
-            if not first_line:
-                raise ValueError(f"Empty CSV file: {path}")
+    if not (0.0 <= rate < 1.0):
+        raise argparse.ArgumentTypeError(f"dropout rate must be >= 0.0 and < 1.0 (got {rate})")
 
-            parts = first_line.split(',')
-
-            if len(parts) < 2:
-                raise ValueError(f"Invalid CSV format: expected at least 2 columns, got {len(parts)}")
-
-            # Check column 1 for M/B FIRST (no_header format)
-            if parts[1] in ['M', 'B']:
-                return 'no_header'
-            # Then check last column for 'diagnosis' (with_header format)
-            elif parts[-1] == 'diagnosis':
-                return 'with_header'
-            else:
-                raise ValueError(f"Cannot detect CSV format: column 1 is '{parts[1]}', last column is '{parts[-1]}'. Expected 'M'/'B' in column 1 or 'diagnosis' in last column.")
-
-    except FileNotFoundError:
-        raise FileNotFoundError(f"CSV file not found: {path}")
-    except PermissionError:
-        raise PermissionError(f"Permission denied when reading CSV file: {path}")
-
-
-def standardize_features(X_train, X_val=None):
-    """Standardize features (zero mean, unit variance)"""
-    mean = X_train.mean(axis=0)
-    std = X_train.std(axis=0)
-    std[std == 0] = 1
-
-    X_train_norm = (X_train - mean) / std
-    X_val_norm = (X_val - mean) / std if X_val is not None else None
-
-    return X_train_norm, X_val_norm, mean, std
-
-
-def to_onehot(y, num_classes=2):
-    """Convert labels to one-hot encoding"""
-    onehot = np.zeros((len(y), num_classes))
-    onehot[np.arange(len(y)), y.astype(int)] = 1
-    return onehot
-
-
-def plot_learning_curves(history):
-    """Plot training and validation curves"""
-    epochs = range(1, len(history['train_loss']) + 1)
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-    ax1.plot(epochs, history['train_loss'], 'b-', label='Training loss')
-    ax1.plot(epochs, history['val_loss'], 'r-', label='Validation loss')
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss')
-    ax1.set_title('Training and Validation Loss')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-
-    ax2.plot(epochs, history['train_acc'], 'b-', label='Training accuracy')
-    ax2.plot(epochs, history['val_acc'], 'r-', label='Validation accuracy')
-    ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('Accuracy')
-    ax2.set_title('Training and Validation Accuracy')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    os.makedirs('models', exist_ok=True)
-    plt.savefig('models/learning_curves.png', dpi=100, bbox_inches='tight')
-    print("Learning curves saved to: models/learning_curves.png")
-    plt.show()
+    return rate
 
 
 def main():
@@ -154,6 +58,8 @@ Examples:
   python train.py                                    # Default layers [64, 32]
   python train.py --layers 128 64 32                 # Custom hidden layers
   python train.py data/custom.csv -l 32 16           # Custom file and layers
+  python train.py --dropout 0.3                      # Add 30% dropout between hidden layers
+  python train.py -l 128 64 32 -d 0.5                # Custom layers with 50% dropout
         """
     )
     parser.add_argument(
@@ -170,6 +76,13 @@ Examples:
         metavar='SIZE',
         help='Hidden layer sizes (default: 64 32). Must specify at least 2 layers.'
     )
+    parser.add_argument(
+        '--dropout', '-d',
+        type=dropout_rate,
+        default=0.0,
+        metavar='RATE',
+        help='Dropout rate between hidden layers (default: 0.0, range: [0.0, 1.0))'
+    )
 
     args = parser.parse_args()
 
@@ -185,6 +98,8 @@ Examples:
     print("Network Configuration")
     print("=" * 60)
     print(f"Hidden layers: {args.layers}")
+    if args.dropout > 0:
+        print(f"Dropout rate: {args.dropout}")
     print("=" * 60)
     print()
 
@@ -214,34 +129,15 @@ Examples:
             if os.path.exists(val_path):
                 # Use separate train/val files
                 print(f"Loading data from {train_path} and {val_path}...")
-                X_train, y_train, X_val, y_val = load_data_with_header(train_path, val_path)
+                X_train, y_train, X_val, y_val = load_train_val_data(train_path, val_path)
             else:
-                # Use single file, split it ourselves
-                print(f"Loading data from {train_path} (no validation file found, will split)...")
-                import pandas as pd
-                df = pd.read_csv(train_path)
-                X_all = df.drop(['diagnosis'], axis=1).values
-                y_all = df['diagnosis'].values
-
-                # Split 90/10 for train/val
-                n_samples = len(X_all)
-                indices = np.random.permutation(n_samples)
-                split_idx = int(0.9 * n_samples)
-
-                X_train, y_train = X_all[indices[:split_idx]], y_all[indices[:split_idx]]
-                X_val, y_val = X_all[indices[split_idx:]], y_all[indices[split_idx:]]
-
+                print(f"Error: Validation file not found: {val_path}")
+                print("Please run split_dataset.py first to create train/val split")
+                sys.exit(1)
         else:  # no_header
-            print(f"Loading data from {train_path} (no header format)...")
-            X_all, y_all = load_data_no_header(train_path)
-
-            # Split 90/10 for train/val
-            n_samples = len(X_all)
-            indices = np.random.permutation(n_samples)
-            split_idx = int(0.9 * n_samples)
-
-            X_train, y_train = X_all[indices[:split_idx]], y_all[indices[:split_idx]]
-            X_val, y_val = X_all[indices[split_idx:]], y_all[indices[split_idx:]]
+            print(f"Error: no_header format requires pre-split data")
+            print("Please run split_dataset.py first to create data_train.csv and data_val.csv")
+            sys.exit(1)
 
         # Standardize
         X_train, X_val, mean, std = standardize_features(X_train, X_val)
@@ -257,11 +153,11 @@ Examples:
         if not os.path.exists(train_path) or not os.path.exists(val_path):
             print("Error: Training or validation data not found!")
             print("Run: python scripts/split_dataset.py data/data.csv")
-            print("Or:  python scripts/train.py data/data_training.csv")
+            print("Or:  python scripts/train.py data/data_train.csv")
             sys.exit(1)
 
         print("Loading data (standard mode)...")
-        X_train, y_train, X_val, y_val = load_data_with_header(train_path, val_path)
+        X_train, y_train, X_val, y_val = load_train_val_data(train_path, val_path)
 
         # Standardize
         X_train, X_val, mean, std = standardize_features(X_train, X_val)
@@ -270,6 +166,14 @@ Examples:
     print(f"x_train shape : ({X_train.shape[0]}, {X_train.shape[1]})")
     print(f"x_valid shape : ({X_val.shape[0]}, {X_val.shape[1]})")
 
+    # ===========================================
+    # CONFIGURATION: Choisir l'activation de sortie
+    # ===========================================
+    # "softmax" : 2 neurones, categorical cross-entropy, labels one-hot
+    # "sigmoid" : 1 neurone, binary cross-entropy, labels simples (0/1)
+    OUTPUT_ACTIVATION = "softmax"
+    # ===========================================
+
     # Create network with configurable layers
     n_features = X_train.shape[1]
     network = Network()
@@ -277,36 +181,48 @@ Examples:
     # Build layer configs dynamically from args.layers
     layer_configs = []
 
-    # Hidden layers
+    # Hidden layers (with optional dropout)
     prev_size = n_features
     for layer_size in args.layers:
         layer_configs.append({
             'input_size': prev_size,
             'output_size': layer_size,
             'activation': 'relu',
-            'l2_lambda': 0.0005
+            'l2_lambda': 0.0005,
+            'dropout_rate': args.dropout
         })
         prev_size = layer_size
 
-    # Output layer
-    layer_configs.append({
-        'input_size': prev_size,
-        'output_size': 2,
-        'activation': 'softmax'
-    })
+    # Output layer (no dropout)
+    if OUTPUT_ACTIVATION == "sigmoid":
+        layer_configs.append({
+            'input_size': prev_size,
+            'output_size': 1,
+            'activation': 'sigmoid'
+        })
+    else:
+        layer_configs.append({
+            'input_size': prev_size,
+            'output_size': 2,
+            'activation': 'softmax'
+        })
 
     network.create_network(layer_configs)
 
-    # Convert labels to one-hot
-    y_train_onehot = to_onehot(y_train)
-    y_val_onehot = to_onehot(y_val)
+    # Prepare labels selon l'activation choisie
+    if OUTPUT_ACTIVATION == "sigmoid":
+        y_train_prepared = y_train
+        y_val_prepared = y_val
+    else:
+        y_train_prepared = to_onehot(y_train)
+        y_val_prepared = to_onehot(y_val)
 
     # Train
     network.train(
-        X_train, y_train_onehot,
-        X_val, y_val_onehot,
+        X_train, y_train_prepared,
+        X_val, y_val_prepared,
         epochs=600,
-        learning_rate=0.08,
+        learning_rate=0.001,
         batch_size=16,
         patience=60,
         verbose=True
@@ -317,8 +233,8 @@ Examples:
     print("Training complete!")
     print("=" * 60)
 
-    train_loss, train_acc = network.evaluate(X_train, y_train_onehot)
-    val_loss, val_acc = network.evaluate(X_val, y_val_onehot)
+    train_loss, train_acc = network.evaluate(X_train, y_train_prepared)
+    val_loss, val_acc = network.evaluate(X_val, y_val_prepared)
 
     print(f"\nFinal Results:")
     print(f"  Training   - Loss: {train_loss:.4f}, Accuracy: {train_acc:.4f}")

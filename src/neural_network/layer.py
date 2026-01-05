@@ -2,68 +2,11 @@ import numpy as np
 from .activations import get_activation
 
 
-class Dropout:
-    """Dropout layer for regularization"""
-
-    def __init__(self, rate=0.5):
-        """
-        Initialize dropout layer
-
-        Args:
-            rate (float): Fraction of neurons to drop (0 to 1)
-        """
-        if not 0 <= rate < 1:
-            raise ValueError("Dropout rate must be between 0 and 1")
-        self.rate = rate
-        self.mask = None
-        self.training = True
-
-    def forward(self, inputs):
-        """
-        Forward pass with dropout
-
-        Args:
-            inputs (np.array): Input data
-
-        Returns:
-            np.array: Output with dropout applied (if training)
-        """
-        if self.training and self.rate > 0:
-            # Create binary mask (1 = keep, 0 = drop)
-            self.mask = np.random.binomial(1, 1 - self.rate, size=inputs.shape)
-            # Apply mask and scale by 1/(1-rate) to maintain expected values
-            return (inputs * self.mask) / (1 - self.rate)
-        else:
-            # During inference, don't apply dropout
-            return inputs
-
-    def backward(self, grad_output, learning_rate=None):
-        """
-        Backward pass through dropout
-
-        Args:
-            grad_output (np.array): Gradient from next layer
-            learning_rate: Unused, for API compatibility
-
-        Returns:
-            np.array: Gradient with same mask applied
-        """
-        if self.training and self.rate > 0:
-            return (grad_output * self.mask) / (1 - self.rate)
-        return grad_output
-
-    def get_params(self):
-        """Get layer parameters for saving"""
-        return {
-            'type': 'dropout',
-            'rate': self.rate
-        }
-
-
 class Layer:
     """Dense (fully connected) layer for neural network"""
 
-    def __init__(self, input_size, output_size, activation='sigmoid', weights_initializer='he', l2_lambda=0.0):
+    def __init__(self, input_size, output_size, activation='sigmoid', weights_initializer='he',
+                 l2_lambda=0.0, dropout_rate=0.0):
         """
         Initialize a dense layer
 
@@ -73,11 +16,17 @@ class Layer:
             activation (str): Activation function name
             weights_initializer (str): Weight initialization strategy
             l2_lambda (float): L2 regularization coefficient (0 = no regularization)
+            dropout_rate (float): Dropout rate (0 = no dropout, must be < 1)
         """
+        if not 0 <= dropout_rate < 1:
+            raise ValueError("Dropout rate must be >= 0 and < 1")
+
         self.input_size = input_size
         self.output_size = output_size
         self.activation_func = get_activation(activation)
         self.l2_lambda = l2_lambda
+        self.dropout_rate = dropout_rate
+        self.training = True
 
         # Initialize weights and biases
         self.weights = self._initialize_weights(weights_initializer)
@@ -87,6 +36,7 @@ class Layer:
         self.last_input = None
         self.last_z = None  # Linear output (before activation)
         self.last_output = None  # Output after activation
+        self.dropout_mask = None  # Mask for dropout
 
     def _initialize_weights(self, method):
         """Initialize weights using specified method"""
@@ -112,7 +62,7 @@ class Layer:
             inputs (np.array): Input data of shape (input_size, batch_size) or (input_size,)
 
         Returns:
-            np.array: Output after applying weights, biases and activation
+            np.array: Output after applying weights, biases, activation, and dropout
         """
         # Ensure input is 2D (input_size, batch_size)
         if inputs.ndim == 1:
@@ -127,15 +77,21 @@ class Layer:
         # Apply activation function
         self.last_output = self.activation_func.forward(self.last_z)
 
+        # Apply dropout (only during training)
+        if self.training and self.dropout_rate > 0:
+            self.dropout_mask = np.random.binomial(1, 1 - self.dropout_rate, size=self.last_output.shape)
+            self.last_output = (self.last_output * self.dropout_mask) / (1 - self.dropout_rate)
+
         return self.last_output
 
-    def backward(self, grad_output, learning_rate):
+    def backward(self, grad_output, learning_rate, is_output_layer=False):
         """
         Backward propagation through the layer
 
         Args:
             grad_output (np.array): Gradient of loss w.r.t layer output
             learning_rate (float): Learning rate for weight updates
+            is_output_layer (bool): If True, skip activation gradient (already included in grad_output)
 
         Returns:
             np.array: Gradient of loss w.r.t layer input
@@ -144,12 +100,20 @@ class Layer:
         if grad_output.ndim == 1:
             grad_output = grad_output.reshape(-1, 1)
 
+        # Apply dropout mask to gradient (same mask as forward pass)
+        if self.training and self.dropout_rate > 0:
+            grad_output = (grad_output * self.dropout_mask) / (1 - self.dropout_rate)
+
         batch_size = self.last_input.shape[1]
 
         # Compute gradient w.r.t activation input (z)
-        # For most activations: dL/dz = dL/da * da/dz
-        activation_grad = self.activation_func.backward(self.last_z)
-        grad_z = grad_output * activation_grad
+        # For output layer with cross-entropy: grad_output is already dL/dz (y_pred - y)
+        # For hidden layers: dL/dz = dL/da * da/dz
+        if is_output_layer:
+            grad_z = grad_output  # Already dL/dz for cross-entropy
+        else:
+            activation_grad = self.activation_func.backward(self.last_z)
+            grad_z = grad_output * activation_grad
 
         # Compute gradients w.r.t weights and biases
         grad_weights = np.dot(grad_z, self.last_input.T) / batch_size
@@ -182,7 +146,8 @@ class Layer:
             'input_size': self.input_size,
             'output_size': self.output_size,
             'activation': self.activation_func.__class__.__name__.lower(),
-            'l2_lambda': self.l2_lambda
+            'l2_lambda': self.l2_lambda,
+            'dropout_rate': self.dropout_rate
         }
 
     def set_params(self, params):
@@ -191,3 +156,4 @@ class Layer:
         self.biases = params['biases']
         self.activation_func = get_activation(params['activation'])
         self.l2_lambda = params.get('l2_lambda', 0.0)
+        self.dropout_rate = params.get('dropout_rate', 0.0)

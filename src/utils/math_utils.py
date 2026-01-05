@@ -50,13 +50,21 @@ def accuracy(y_true, y_pred):
     Returns:
         float: Accuracy
     """
+    # Flatten y_true if it's 2D with 1 row (sigmoid labels)
+    if y_true.ndim == 2 and y_true.shape[0] == 1:
+        y_true = y_true.flatten()
     # If one-hot encoded, convert to class indices
-    if y_true.ndim == 2 and y_true.shape[0] > 1:
+    elif y_true.ndim == 2 and y_true.shape[0] > 1:
         y_true = np.argmax(y_true, axis=0)
-    if y_pred.ndim == 2 and y_pred.shape[0] > 1:
+
+    # Flatten y_pred if it's 2D with 1 row (sigmoid output)
+    if y_pred.ndim == 2 and y_pred.shape[0] == 1:
+        y_pred = (y_pred.flatten() > 0.5).astype(int)
+    # If multi-class softmax, get class indices
+    elif y_pred.ndim == 2 and y_pred.shape[0] > 1:
         y_pred = np.argmax(y_pred, axis=0)
+    # If 1D, apply threshold
     elif y_pred.ndim == 1:
-        # Binary classification with sigmoid
         y_pred = (y_pred > 0.5).astype(int)
 
     return np.mean(y_pred == y_true)
