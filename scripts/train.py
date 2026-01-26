@@ -72,7 +72,7 @@ Examples:
         '--layers', '-l',
         type=int,
         nargs='*',
-        default=[64, 32],
+        default=[256, 256, 256, 256],
         metavar='SIZE',
         help='Hidden layer sizes (default: 64 32). Must specify at least 2 layers.'
     )
@@ -80,6 +80,7 @@ Examples:
         '--dropout', '-d',
         type=dropout_rate,
         default=0.0,
+
         metavar='RATE',
         help='Dropout rate between hidden layers (default: 0.0, range: [0.0, 1.0))'
     )
@@ -197,7 +198,7 @@ Examples:
             'input_size': prev_size,
             'output_size': layer_size,
             'activation': 'relu',
-            'l2_lambda': 0.00005,
+            'l2_lambda': 0.000005,
             'dropout_rate': args.dropout
         })
         prev_size = layer_size
@@ -230,10 +231,18 @@ Examples:
     network.train(
         X_train, y_train_prepared,
         X_val, y_val_prepared,
-        epochs=2000,
-        learning_rate=0.0005,
+        # === PARAMETRES NORMAUX ===
+        epochs=1500,
+        learning_rate=0.0007,
         batch_size=64,
-        patience=300,
+        patience=500,
+        # === PARAMETRES OVERFIT ===
+        # epochs=500,
+        # learning_rate=0.18,
+        # batch_size=4,
+        # patience=9999,
+        # + utiliser: --layers 256 128 64 32
+        # + mettre l2_lambda=0.0 ligne ~200
         verbose=True
     )
 
