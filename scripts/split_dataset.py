@@ -1,5 +1,5 @@
 import pandas as pd
-import numpy as np
+import numpy as np  # Pour random seed
 import sys
 import os
 
@@ -32,25 +32,7 @@ def load_dataset(filepath):
     return x, y
 
 
-def normalize_features(X_train, X_val):
-    """
-    Normalize features using training set statistics
-    """
-    # Calculer mean et std sur le training set seulement
-    mean = X_train.mean(axis=0)
-    std = X_train.std(axis=0)
-
-    # Éviter division par 0
-    std = np.where(std == 0, 1, std)
-
-    # Normaliser train et validation avec les mêmes paramètres
-    X_train_norm = (X_train - mean) / std
-    X_val_norm = (X_val - mean) / std
-
-    return X_train_norm, X_val_norm
-
-
-def split_train_validation(x, y, test_size=0.2, random_state=42):
+def split_train_validation(x, y, test_size=0.25, random_state=41322):
     """
     Split dataset into training and validation sets
     """
@@ -106,22 +88,13 @@ def main():
         # Diviser train/validation
         X_train, X_val, y_train, y_val = split_train_validation(x, y)
 
-        # Normaliser les features
-        X_train_norm, X_val_norm = normalize_features(
-            X_train.values, X_val.values
-        )
-
-        # Reconvertir en DataFrame avec les noms de colonnes
-        X_train = pd.DataFrame(X_train_norm, columns=x.columns)
-        X_val = pd.DataFrame(X_val_norm, columns=x.columns)
-
         # Réinitialiser les indices
-        X_train.reset_index(drop=True, inplace=True)
-        X_val.reset_index(drop=True, inplace=True)
-        y_train.reset_index(drop=True, inplace=True)
-        y_val.reset_index(drop=True, inplace=True)
+        X_train = X_train.reset_index(drop=True)
+        X_val = X_val.reset_index(drop=True)
+        y_train = y_train.reset_index(drop=True)
+        y_val = y_val.reset_index(drop=True)
 
-        # Sauvegarder
+        # Sauvegarder (données brutes, normalisation dans train.py)
         save_splits(X_train, X_val, y_train, y_val)
 
         # Afficher les dimensions comme dans l'exemple du sujet

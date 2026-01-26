@@ -135,9 +135,18 @@ Examples:
                 print("Please run split_dataset.py first to create train/val split")
                 sys.exit(1)
         else:  # no_header
-            print(f"Error: no_header format requires pre-split data")
-            print("Please run split_dataset.py first to create data_train.csv and data_val.csv")
-            sys.exit(1)
+            # Look for corresponding test file (data_training.csv -> data_test.csv)
+            base_path = train_path.replace('_training.csv', '')
+            test_path = base_path + '_test.csv'
+
+            if os.path.exists(test_path):
+                print(f"Loading data from {train_path} and {test_path}...")
+                X_train, y_train = load_data_no_header(train_path)
+                X_val, y_val = load_data_no_header(test_path)
+            else:
+                print(f"Error: Test file not found: {test_path}")
+                print("Expected files: data_training.csv and data_test.csv")
+                sys.exit(1)
 
         # Standardize
         X_train, X_val, mean, std = standardize_features(X_train, X_val)
@@ -188,7 +197,7 @@ Examples:
             'input_size': prev_size,
             'output_size': layer_size,
             'activation': 'relu',
-            'l2_lambda': 0.0005,
+            'l2_lambda': 0.00005,
             'dropout_rate': args.dropout
         })
         prev_size = layer_size
@@ -221,10 +230,10 @@ Examples:
     network.train(
         X_train, y_train_prepared,
         X_val, y_val_prepared,
-        epochs=600,
-        learning_rate=0.001,
-        batch_size=16,
-        patience=60,
+        epochs=2000,
+        learning_rate=0.0005,
+        batch_size=64,
+        patience=300,
         verbose=True
     )
 
