@@ -81,7 +81,6 @@ class Layer:
         if self.training and self.dropout_rate > 0:
             self.dropout_mask = np.random.binomial(1, 1 - self.dropout_rate, size=self.last_output.shape)
             self.last_output = (self.last_output * self.dropout_mask) / (1 - self.dropout_rate)
-
         return self.last_output
 
     def backward(self, grad_output, learning_rate, is_output_layer=False):

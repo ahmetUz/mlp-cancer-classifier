@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.neural_network.network import Network
 from src.data.loaders import detect_csv_format, load_single_dataset, load_data_no_header
-from src.utils.math_utils import binary_cross_entropy
+from src.data.preprocessing import to_onehot
 
 
 def main():
@@ -71,60 +71,35 @@ def main():
     # Make predictions
     print("Making predictions...")
     network.eval_mode()
-    y_pred = network.forward(X_norm.T)
+    bce_loss, accuracy = network.evaluate(X_norm, to_onehot(y))
 
-    # Get probabilities (class 1 = malignant)
-    if y_pred.shape[0] == 2:
-        y_pred_proba = y_pred[1, :]
-    else:
-        y_pred_proba = y_pred.flatten()
-    y_pred_classes = (y_pred_proba > 0.5).astype(int)
-
-    # Display results
+    # Print results
     print("\n" + "=" * 60)
-    print("Predictions")
+    print("Evaluation Results")
     print("=" * 60)
+    print(f"  Samples: {len(y)}")
+    print(f"  Binary Cross-Entropy Loss: {bce_loss:.4f}")
+    print(f"  Accuracy: {accuracy:.4f} ({int(accuracy * len(y))}/{len(y)} correct)")
 
-    for i in range(min(10, len(y_pred_classes))):
-        pred_label = "Malignant" if y_pred_classes[i] == 1 else "Benign"
-        print(f"Sample {i+1}: {pred_label} (prob: {y_pred_proba[i]:.4f})")
+    # Scoring for evaluation.py
+    print("\n" + "=" * 60)
+    print("SCORING (evaluation.py)")
+    print("=" * 60)
+    if bce_loss > 0.35:
+        score = 0
+    elif bce_loss > 0.25:
+        score = 1
+    elif bce_loss > 0.18:
+        score = 2
+    elif bce_loss > 0.13:
+        score = 3
+    elif bce_loss > 0.08:
+        score = 4
+    else:
+        score = 5
 
-    if len(y_pred_classes) > 10:
-        print(f"... and {len(y_pred_classes) - 10} more samples")
-
-    # Evaluate if labels available
-    if y is not None:
-        # Binary cross-entropy
-        bce_loss = binary_cross_entropy(y, y_pred_proba)
-
-        accuracy = np.mean(y_pred_classes == y)
-
-        print("\n" + "=" * 60)
-        print("Evaluation Results")
-        print("=" * 60)
-        print(f"  Samples: {len(y)}")
-        print(f"  Binary Cross-Entropy Loss: {bce_loss:.4f}")
-        print(f"  Accuracy: {accuracy:.4f} ({int(accuracy * len(y))}/{len(y)} correct)")
-
-        # Scoring for evaluation.py
-        print("\n" + "=" * 60)
-        print("SCORING (evaluation.py)")
-        print("=" * 60)
-        if bce_loss > 0.35:
-            score = 0
-        elif bce_loss > 0.25:
-            score = 1
-        elif bce_loss > 0.18:
-            score = 2
-        elif bce_loss > 0.13:
-            score = 3
-        elif bce_loss > 0.08:
-            score = 4
-        else:
-            score = 5
-
-        print(f"  Loss: {bce_loss:.4f}")
-        print(f"  Score: {score}/5")
+    print(f"  Loss: {bce_loss:.4f}")
+    print(f"  Score: {score}/5")
 
 
 if __name__ == "__main__":

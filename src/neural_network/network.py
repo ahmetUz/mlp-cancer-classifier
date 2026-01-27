@@ -86,20 +86,19 @@ class Network:
 
         return output
 
-    def backward(self, X, y, learning_rate):
+    def backward(self, X, y, y_pred, learning_rate):
         """
         Backward propagation through entire network
 
         Args:
             X (np.array): Input data
             y (np.array): True labels (one-hot encoded for categorical)
+            y_pred (np.array): Predictions from forward pass
             learning_rate (float): Learning rate
 
         Returns:
             tuple: (loss, y_pred) - Loss value and predictions before weight update
         """
-        # Forward pass
-        y_pred = self.forward(X)
 
         # Ensure y and y_pred have same shape
         if y.ndim == 1:
@@ -141,8 +140,10 @@ class Network:
         Returns:
             tuple: (loss, accuracy) for this batch
         """
-        # Forward and backward pass (y_pred is from before weight update)
-        loss, y_pred = self.backward(X_batch.T, y_batch.T, learning_rate)
+        # Forward pass
+        y_pred = self.forward(X_batch.T)
+        #backward pass (y_pred is from before weight update)
+        loss, y_pred = self.backward(X_batch.T, y_batch.T, y_pred, learning_rate)
 
         # Calculate accuracy using the same y_pred as the loss
         acc = accuracy(y_batch.T, y_pred)
@@ -196,13 +197,14 @@ class Network:
                 epoch_train_accs.append(batch_acc)
 
             # Calculate epoch metrics
+            # Compute train metrics
             train_loss = np.mean(epoch_train_losses)
             train_acc = np.mean(epoch_train_accs)
-
             # Set eval mode and compute validation metrics
             self.eval_mode()
             val_loss, val_acc = self.evaluate(X_val, y_val)
-            
+
+            # Early stopping check
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_epoch = epoch
@@ -326,9 +328,6 @@ class Network:
         layer_configs = model_data['layers']
 
         for config in layer_configs:
-            # Skip old dropout-only configs (backward compatibility)
-            if config.get('type') == 'dropout':
-                continue
             layer = Layer(
                 input_size=config['input_size'],
                 output_size=config['output_size'],

@@ -72,7 +72,7 @@ Examples:
         '--layers', '-l',
         type=int,
         nargs='*',
-        default=[256, 256, 256, 256],
+        default=[128, 128, 128, 128],
         metavar='SIZE',
         help='Hidden layer sizes (default: 64 32). Must specify at least 2 layers.'
     )
@@ -190,7 +190,8 @@ Examples:
             'input_size': prev_size,
             'output_size': layer_size,
             'activation': 'relu',
-            'l2_lambda': 0.000005,
+            'l2_lambda': 0.000001,
+            # 'l2_lambda': 0.0,
             'dropout_rate': args.dropout
         })
         prev_size = layer_size
@@ -213,10 +214,10 @@ Examples:
         X_train, y_train_prepared,
         X_val, y_val_prepared,
         # === PARAMETRES NORMAUX ===
-        epochs=1500,
+        epochs=500000,
         learning_rate=0.0007,
         batch_size=64,
-        patience=500,
+        patience=1000,
         # === PARAMETRES OVERFIT ===
         # epochs=500,
         # learning_rate=0.18,

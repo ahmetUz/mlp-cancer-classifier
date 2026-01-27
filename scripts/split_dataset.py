@@ -32,7 +32,7 @@ def load_dataset(filepath):
     return x, y
 
 
-def split_train_validation(x, y, test_size=0.25, random_state=41322):
+def split_train_validation(x, y, test_size=0.25, random_state=63465):
     """
     Split dataset into training and validation sets
     """
