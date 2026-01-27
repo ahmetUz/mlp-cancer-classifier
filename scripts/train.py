@@ -213,18 +213,10 @@ Examples:
     network.train(
         X_train, y_train_prepared,
         X_val, y_val_prepared,
-        # === PARAMETRES NORMAUX ===
-        epochs=500000,
+        epochs=50000,
         learning_rate=0.0007,
         batch_size=64,
         patience=1000,
-        # === PARAMETRES OVERFIT ===
-        # epochs=500,
-        # learning_rate=0.18,
-        # batch_size=4,
-        # patience=9999,
-        # + utiliser: --layers 256 128 64 32
-        # + mettre l2_lambda=0.0 ligne ~200
         verbose=True
     )
 

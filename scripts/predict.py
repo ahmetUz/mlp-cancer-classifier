@@ -83,7 +83,7 @@ def main():
 
     # Scoring for evaluation.py
     print("\n" + "=" * 60)
-    print("SCORING (evaluation.py)")
+    print("SCORING")
     print("=" * 60)
     if bce_loss > 0.35:
         score = 0
