@@ -3,7 +3,7 @@ import pickle
 import os
 import copy
 from .layer import Layer
-from ..utils.math_utils import binary_cross_entropy, categorical_cross_entropy, accuracy
+from ..utils.math_utils import binary_cross_entropy, accuracy
 
 
 class Network:
@@ -107,17 +107,10 @@ class Network:
         if y_pred.ndim == 1:
             y_pred = y_pred.reshape(1, -1)
 
-        # Determine which loss function to use based on output shape
-        output_layer = self.layers[-1]
-        is_softmax = output_layer.activation_func.__class__.__name__ == 'Softmax'
-
-        # Calculate loss
-        if is_softmax and y_pred.shape[0] > 1:
-            # Categorical cross-entropy for softmax
-            loss = categorical_cross_entropy(y, y_pred)
-        else:
-            # Binary cross-entropy for sigmoid
-            loss = binary_cross_entropy(y, y_pred)
+        # Extract class-1 probability for BCE loss
+        y_pred_class1 = y_pred[1:2, :]  # P(class=1)
+        y_true_class1 = y[1:2, :]       # binary label
+        loss = binary_cross_entropy(y_true_class1, y_pred_class1)
 
         # Add L2 regularization penalty to loss
         for layer in self.layers:
@@ -244,34 +237,17 @@ class Network:
         """
         y_pred_raw = self.forward(X.T)
 
-        # Determine which loss to use
-        output_layer = self.layers[-1]
-        is_softmax = output_layer.activation_func.__class__.__name__ == 'Softmax'
-
         # Prepare labels for loss computation
-        if y.ndim == 1:
-            # Convert to one-hot if needed for softmax
-            if is_softmax and y_pred_raw.shape[0] > 1:
-                y_one_hot = np.zeros((y_pred_raw.shape[0], len(y)))
-                y_one_hot[y.astype(int), np.arange(len(y))] = 1
-                loss = categorical_cross_entropy(y_one_hot, y_pred_raw)
-            else:
-                y_reshaped = y.reshape(1, -1)
-                loss = binary_cross_entropy(y_reshaped, y_pred_raw)
-        else:
-            # Already one-hot encoded
-            if is_softmax and y_pred_raw.shape[0] > 1:
-                loss = categorical_cross_entropy(y.T, y_pred_raw)
-            else:
-                loss = binary_cross_entropy(y, y_pred_raw.flatten())
+        y_reshaped = y.T if y.ndim == 2 else y.reshape(1, -1)
 
-        # For accuracy, convert predictions
-        if is_softmax and y_pred_raw.shape[0] > 1:
-            y_pred_classes = np.argmax(y_pred_raw, axis=0)
-        else:
-            y_pred_classes = (y_pred_raw.flatten() > 0.5).astype(int)
+        # Extract class-1 probability for BCE loss
+        y_pred_class1 = y_pred_raw[1:2, :]  # P(class=1)
+        y_true_class1 = y_reshaped[1:2, :]  # binary label
+        loss = binary_cross_entropy(y_true_class1, y_pred_class1)
 
-        y_true_classes = y if y.ndim == 1 else np.argmax(y, axis=1) if y.shape[1] > 1 else y.flatten()
+        # Predictions via argmax on full softmax output
+        y_pred_classes = np.argmax(y_pred_raw, axis=0)
+        y_true_classes = np.argmax(y_reshaped, axis=0)
         acc = np.mean(y_pred_classes == y_true_classes)
 
         return loss, acc

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.neural_network.network import Network
 from src.data.loaders import detect_csv_format, load_single_dataset, load_data_no_header
+from src.utils.math_utils import binary_cross_entropy
 
 
 def main():
@@ -72,13 +73,12 @@ def main():
     network.eval_mode()
     y_pred = network.forward(X_norm.T)
 
-    # Get probabilities
+    # Get probabilities (class 1 = malignant)
     if y_pred.shape[0] == 2:
-        y_pred_proba = y_pred[1, :]  # Probability of class 1 (Malignant)
-        y_pred_classes = np.argmax(y_pred, axis=0)
+        y_pred_proba = y_pred[1, :]
     else:
         y_pred_proba = y_pred.flatten()
-        y_pred_classes = (y_pred_proba > 0.5).astype(int)
+    y_pred_classes = (y_pred_proba > 0.5).astype(int)
 
     # Display results
     print("\n" + "=" * 60)
@@ -95,12 +95,7 @@ def main():
     # Evaluate if labels available
     if y is not None:
         # Binary cross-entropy
-        epsilon = 1e-15
-        y_pred_clipped = np.clip(y_pred_proba, epsilon, 1 - epsilon)
-        bce_loss = -np.mean(
-            y * np.log(y_pred_clipped) +
-            (1 - y) * np.log(1 - y_pred_clipped)
-        )
+        bce_loss = binary_cross_entropy(y, y_pred_proba)
 
         accuracy = np.mean(y_pred_classes == y)
 

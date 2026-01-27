@@ -176,14 +176,6 @@ Examples:
     print(f"x_train shape : ({X_train.shape[0]}, {X_train.shape[1]})")
     print(f"x_valid shape : ({X_val.shape[0]}, {X_val.shape[1]})")
 
-    # ===========================================
-    # CONFIGURATION: Choisir l'activation de sortie
-    # ===========================================
-    # "softmax" : 2 neurones, categorical cross-entropy, labels one-hot
-    # "sigmoid" : 1 neurone, binary cross-entropy, labels simples (0/1)
-    OUTPUT_ACTIVATION = "softmax"
-    # ===========================================
-
     # Create network with configurable layers
     n_features = X_train.shape[1]
     network = Network()
@@ -204,28 +196,17 @@ Examples:
         prev_size = layer_size
 
     # Output layer (no dropout)
-    if OUTPUT_ACTIVATION == "sigmoid":
-        layer_configs.append({
-            'input_size': prev_size,
-            'output_size': 1,
-            'activation': 'sigmoid'
-        })
-    else:
-        layer_configs.append({
-            'input_size': prev_size,
-            'output_size': 2,
-            'activation': 'softmax'
-        })
+    layer_configs.append({
+        'input_size': prev_size,
+        'output_size': 2,
+        'activation': 'softmax'
+    })
 
     network.create_network(layer_configs)
 
-    # Prepare labels selon l'activation choisie
-    if OUTPUT_ACTIVATION == "sigmoid":
-        y_train_prepared = y_train
-        y_val_prepared = y_val
-    else:
-        y_train_prepared = to_onehot(y_train)
-        y_val_prepared = to_onehot(y_val)
+    # Prepare labels (one-hot encoding for softmax output)
+    y_train_prepared = to_onehot(y_train)
+    y_val_prepared = to_onehot(y_val)
 
     # Train
     network.train(
